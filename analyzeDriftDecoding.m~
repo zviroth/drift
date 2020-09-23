@@ -1,0 +1,216 @@
+%uses files saved by: decodeDrift_direction.m, decodeDriftControl_direction.m, decodeDrift3T_direction.m
+close all
+clear all
+disjoint=0;%for expNum=2
+deriv=0;
+illusion = 0;%0=direction, 1=illusion
+
+expNum=1;
+crossValidation = 'trial';%'trial','run'
+locThresh = 0.2; %only include voxels with coherence>locThresh, for each of the two localizers.
+
+rand50color = [0.2 0.2 0.2];
+rand95color = [0.4 0 0];
+meanColor = [0 0 0];
+subColor = [0.6 0.6 0.6];
+
+plotColors = {[0.2 0.2 1], [1 0.2 0.2], [0.2 1 0.2], [0.2 0.6 0.6]};
+nanColor = [0 0 0];
+disjointStr = '';
+if disjoint
+    disjointStr = 'Disjoint';
+end
+saveFolder = '~/noah/';
+switch expNum
+    case 1
+        expName = '3conds';
+    case 2
+        expName = 'attn';
+    case 3
+        expName = '4conds';
+    case 4
+        expName = '3tdata';
+end
+thrsh = num2str(locThresh,'%.2f');
+locStr = thrsh([1 3:4]);
+directionOrIllusionStr = 'direction';
+if illusion
+    directionOrIllusionStr = 'illusion';
+end
+derivStr='';
+if deriv
+   derivStr = 'Deriv';
+end
+
+if expNum<3
+load([saveFolder 'decodeDrift' disjointStr derivStr '_' directionOrIllusionStr '_' expName '_' crossValidation '_thresh' locStr '.mat'],'crossValidation',...
+    'r2thresh','locThresh','ROIs','subNames','dataFolder',...
+    'subRoiNans','subNumTrials','subNumScans',...
+    'subAcc','subRandAcc','subRand95Acc','nperms','locSharedVox','totalVox');
+else
+    load([saveFolder 'decodeDrift_direction_' expName '_' crossValidation '.mat'],'crossValidation',...
+        'r2thresh','locThresh','ROIs','subNames','dataFolder',...
+        'subRoiNans','subNumTrials','subNumScans',...
+        'subAcc','subRandAcc','subRand95Acc','nperms','numVox','totalVox');
+    locStr = '';
+end
+
+numSubs = length(subNames);
+
+if expNum==2
+    goodSubs = [2:10];
+    numSubs = length(goodSubs);
+    subAcc = subAcc(goodSubs,:,:,:);
+    subRandAcc = subRandAcc(goodSubs,:,:,:,:);
+    subRand95Acc = subRand95Acc(goodSubs,:,:,:);
+    locSharedVox = locSharedVox(goodSubs,:);
+    totalVox = totalVox(goodSubs,:);
+    subNumTrials = subNumTrials(2:end);
+    subNumScans = subNumScans(goodSubs);
+    subRoiNans = subRoiNans(goodSubs,:);
+    
+    subNames = subNames(goodSubs);
+end
+
+
+if illusion %average over left vs no illusion and right vs no illusion
+    subAcc = squeeze(mean(subAcc,4));
+    subRandAcc = squeeze(mean(subRandAcc,4));
+    subRand95Acc= squeeze(mean(subRand95Acc,4));
+    
+%     subAcc = squeeze(subAcc(:,:,:,1));
+%     subRandAcc = squeeze(subRandAcc(:,:,:,1,:));
+%     subRand95Acc= squeeze(subRand95Acc(:,:,:,1));
+end
+
+numRois = length(ROIs);
+
+facealpha = 0.3;
+ilocTitle = {'stim','eye'};
+randDist = squeeze(mean(subRandAcc,1));
+meanAcc = squeeze(mean(subAcc,1));
+numLocs=2;
+if expNum==4
+   meanAcc = meanAcc'; 
+   numLocs=1;
+   clear randDist
+   randDist(:,1,:) = squeeze(mean(subRandAcc,1));
+end
+
+for iroi=1:numRois
+    for iloc=1:numLocs
+%         decodingAcc(isub,iroi,iloc) = res{iloc}.accuracy;
+%         randAccDist(isub,iroi,iloc,:) = res{iloc}.randAccuracy;
+        
+%         temp = subRandAcc(:,iroi,iloc,:);
+%         randDist(iroi,iloc,:) = temp(:);
+        
+%         meanAcc(iroi,iloc) = mean(decodingAcc(:,iroi,iloc));
+        rand95(iroi,iloc) = prctile(randDist(iroi,iloc,:),95);
+        rand50(iroi,iloc) = prctile(randDist(iroi,iloc,:),50);
+        rand05(iroi,iloc) = prctile(randDist(iroi,iloc,:),5);
+    end
+end
+
+maxRandAcc = max(randDist,[],3);
+minRandAcc = min(randDist,[],3);
+roiInd = 1:numRois;
+
+figure(1)
+rows=2;
+cols=1;
+badRoi= zeros(2,numRois);
+
+for iloc=1:numLocs
+    for iroi=1:numRois
+       if sum(isnan( subAcc(:,iroi,iloc)))>0
+          %mark this ROI
+          badRoi(iloc,iroi) = 1;
+          randDist(iroi,iloc,:) = randDist(1,iloc,:);
+          facecolorVec(iloc,iroi,:) = nanColor;
+       else
+           facecolorVec(iloc,iroi,:) = plotColors{iloc};
+       end
+    end
+    subplot(rows,cols,iloc)
+%     violin(squeeze(randDist(:,iloc,:))','xlabel',ROIs,'mc',[]);
+%     plot(1:numRois, rand95(:,iloc),'.','markersize',40,'color',[0 0 0]);
+
+    myviolin(squeeze(randDist(:,iloc,:))','xlabel',ROIs,'facecolor',squeeze(facecolorVec(iloc,:,:)),'facealpha',facealpha);
+%     myviolin(squeeze(randDist(badRoi(iloc,:)==0,iloc,:))','xlabel',ROIs,'facecolor',plotColors{iloc},'facealpha',0.1);
+
+%     meanAcc(badRoi(iloc,:)==1,iloc) = 0.5;
+    plot(1:numRois, meanAcc(:,iloc),'.','markersize',40,'color',plotColors{iloc});
+%     plot(1:numRois, meanAcc(badRoi(iloc,:)==0,iloc),'.','markersize',40,'color',plotColors{iloc});
+
+    ylim([0.3 0.7]);
+    xticks(1:numRois);
+    xticklabels(ROIs);
+    title(ilocTitle{iloc});
+    ylabel('decoding accuracy');
+end
+set(gcf,'position',[150 150 1100 600]);
+
+
+
+figure(2)
+roiInd = 1:numRois;
+for iloc=1:numLocs
+    shift = (iloc-1.5)*0.2;
+   temp = plot([ roiInd+shift; roiInd+shift], [minRandAcc(:,iloc)'; maxRandAcc(:,iloc)'], 'linewidth',3,'color',plotColors{iloc}.^0.5);
+   p(iloc) = temp(1);%for legend, keep plot properties of first ROI
+   hold on
+   plot([ roiInd+shift-0.3; roiInd+shift+0.3], [rand95(:,iloc)'; rand95(:,iloc)'], 'linewidth',3,'color',plotColors{iloc}.^0.5);
+   plot([ roiInd+shift-0.3; roiInd+shift+0.3], [rand05(:,iloc)'; rand05(:,iloc)'], 'linewidth',3,'color',plotColors{iloc}.^0.5);
+   p(3) = plot(roiInd+shift, meanAcc(:,iloc), '.','markersize',15,'color',[0 0 0]);
+end
+xlim([0 numRois+1]);
+ylim([0.3 0.7]);
+xlabel('ROI');
+xticks([1:numRois])
+xticklabels(ROIs);
+ylabel('decoding accuracy');
+if expNum==1 | expNum==2
+    L=legend([p(1) p(2) p(3)],'stim','eye','data');
+elseif expNum==3
+    L=legend([p(1) p(2) p(3)],'local+global','local','data');
+end
+title([expName, ' ', directionOrIllusionStr, ' ', crossValidation ' cv, ' num2str(size(subRandAcc,1)) ' subjects, co>' num2str(locThresh)]);
+set(gcf,'position',[100 1500 1000 400]);
+
+
+
+roiInd = 1:numRois/2;
+hemiROIs = {'lV1','lV2','lV3','lhV4','lLO1','lLO2','lTO1','lTO2','lV3a','lV3b','lV01','lV02'};
+for iloc=1:2
+    figure(2+iloc); clf;
+    shift = 0;%(iloc-1.5)*0.2;
+   plot([ roiInd+shift; roiInd+shift], [minRandAcc(roiInd,iloc)'; maxRandAcc(roiInd,iloc)'], 'linewidth',3,'color',subColor);
+   hold on
+   plot([ roiInd+shift-0.3; roiInd+shift+0.3], [rand95(roiInd,iloc)'; rand95(roiInd,iloc)'], ':','linewidth',2,'color',subColor);
+   plot([ roiInd+shift-0.3; roiInd+shift+0.3], [rand50(roiInd,iloc)'; rand50(roiInd,iloc)'], '-','linewidth',3,'color',subColor);
+   roiX = repmat(roiInd+shift,numSubs,1);
+   plot(roiX+(rand(size(roiX))-0.5)/6,subAcc(:,roiInd,iloc),'o','markersize',5,'color',plotColors{expNum});
+   signifRoiInd = meanAcc(roiInd,iloc)>rand95(roiInd,iloc);
+   plot(roiInd(signifRoiInd)+shift, meanAcc(roiInd(signifRoiInd),iloc), '.','markersize',40,'color',plotColors{expNum});
+   plot(roiInd(~signifRoiInd)+shift, meanAcc(roiInd(~signifRoiInd),iloc), '.','markersize',40,'color',[0.4 0.4 0.4]);
+   
+   xlim([0 length(roiInd)+1]);
+   ylim([0.3 0.7]);
+   xlabel('ROI');
+   xticks([roiInd])
+   xticklabels(hemiROIs);
+   ylabel('decoding accuracy');
+   % L=legend([p(1) p(2) p(3)],'stim','eye','data');
+   title([expName, ' ', directionOrIllusionStr, ' ', crossValidation ' cv, ' num2str(size(subRandAcc,1)) ' subjects, co>' num2str(locThresh) ', localizer ', num2str(iloc)]);
+   fontsize=11;
+   drawPublishAxis('xLabelOffset', -6/64,'yLabelOffset', -7/64, 'xAxisMargin', 1/64, 'yAxisMargin', 1/64,'labelFontSize',fontsize);
+   set(gcf,'position',[5 5 20 10]);
+   legend off
+   
+   print('-painters','-dpdf',[saveFolder 'figures/' expName, '_', directionOrIllusionStr, '_loc_', num2str(iloc) '.pdf']);
+end
+
+
+keyboard
+
